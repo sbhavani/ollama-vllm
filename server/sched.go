@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"math/rand"
 	"os"
 	"reflect"
 	"runtime"
@@ -18,6 +20,7 @@ import (
 	"github.com/ollama/ollama/discover"
 	"github.com/ollama/ollama/envconfig"
 	"github.com/ollama/ollama/format"
+	"github.com/ollama/ollama/fs"
 	"github.com/ollama/ollama/fs/ggml"
 	"github.com/ollama/ollama/llm"
 	"github.com/ollama/ollama/types/model"
@@ -62,15 +65,31 @@ var defaultParallel = 4
 
 var ErrMaxQueue = errors.New("server busy, please try again.  maximum pending requests exceeded")
 
+// Factory functions for creating different LLM servers
+type LLMServerFactory func(gpus discover.GpuInfoList, modelPath string, f *ggml.GGML, adapters, projectors []string, opts api.Options, numParallel int) (llm.LlamaServer, error)
+
 func InitScheduler(ctx context.Context) *Scheduler {
 	maxQueue := envconfig.MaxQueue()
+	
+	// Default to llama.cpp
+	var serverFactory LLMServerFactory = llm.NewLlamaServer
+	
+	// Check if OLLAMA_LLM_BACKEND environment variable is set to vllm
+	if strings.ToLower(envconfig.GetString("OLLAMA_LLM_BACKEND", "llama")) == "vllm" {
+		// Use vLLM backend
+		slog.Info("using vLLM as LLM backend")
+		serverFactory = llm.NewVLLMServer
+	} else {
+		slog.Info("using llama.cpp as LLM backend")
+	}
+	
 	sched := &Scheduler{
 		pendingReqCh:  make(chan *LlmRequest, maxQueue),
 		finishedReqCh: make(chan *LlmRequest, maxQueue),
 		expiredCh:     make(chan *runnerRef, maxQueue),
 		unloadedCh:    make(chan any, maxQueue),
 		loaded:        make(map[string]*runnerRef),
-		newServerFn:   llm.NewLlamaServer,
+		newServerFn:   serverFactory,
 		getGpuFn:      discover.GetGPUInfo,
 		getCpuFn:      discover.GetCPUInfo,
 		reschedDelay:  250 * time.Millisecond,
