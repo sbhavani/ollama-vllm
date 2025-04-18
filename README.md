@@ -50,7 +50,7 @@ curl http://localhost:11434/api/generate -d '{
 ## Performance Considerations
 
 - **vLLM Backend**: Better for larger models and batch inference, leverages CUDA more efficiently
-- **llama.cpp Backend**: Better for CPU-only setups or lower memory requirements
+- **llama.cpp Backend**: Better for CPU-only setups, Mac usage, or lower memory requirements
 
 ## Switching Backends
 
