@@ -77,4 +77,31 @@ docker-compose up -d
 
 - vLLM requires NVIDIA GPUs with CUDA support
 - Not all Ollama models may work with vLLM without conversion
-- Embedding models may have different behavior between backends 
+- Embedding models may have different behavior between backends
+
+## Technical Architecture
+
+This integration connects Ollama with vLLM using a microservices architecture that maintains Ollama's existing LLM abstraction.
+
+### Design Approach
+
+1. **Interface Implementation**: vLLM is integrated by implementing Ollama's `LlamaServer` interface in `llm/vllm.go`. This allows vLLM to be used as a drop-in replacement for llama.cpp without changing the core Ollama code.
+
+2. **Factory Pattern**: A factory function approach is used in the scheduler to dynamically select which backend (llama.cpp or vLLM) to use based on environment configuration. This makes the integration extendable for future backends.
+
+3. **Microservices Communication**: The implementation uses HTTP requests to communicate with the vLLM service, translating between Ollama's internal API and vLLM's OpenAI-compatible API endpoints.
+
+4. **Shared Storage**: Docker volumes are used to share model files between Ollama and vLLM services, ensuring both services have access to the same models.
+
+### Key Technical Components
+
+- **API Translation**: Converts between Ollama's completion requests and vLLM's OpenAI-compatible API
+- **Streaming Support**: Implements server-sent events (SSE) processing to stream responses back to clients
+- **Text Processing**: Uses Ollama's existing tokenizers with vLLM for consistent tokenization
+- **Resource Estimation**: Adapts Ollama's memory estimation system to work with vLLM's requirements
+
+### Performance Optimizations
+
+- **Parallel Processing**: Configurable parallel inference for handling multiple requests
+- **GPU Memory Utilization**: Adjustable GPU memory utilization to balance between performance and stability
+- **Tensor Parallelism**: Support for multi-GPU inference via tensor parallelism configuration 
